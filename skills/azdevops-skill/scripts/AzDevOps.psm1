@@ -1548,8 +1548,9 @@ function Get-AdoWikiPageTree {
     if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
     $wikiId = $wikiInfo.wikiIdentifier
 
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
     $encodedPath = [Uri]::EscapeDataString($Path)
-    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&recursionLevel=$Depth&api-version=7.0"
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&recursionLevel=$Depth&api-version=7.0"
 
     $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
     if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
