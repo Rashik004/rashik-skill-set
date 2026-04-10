@@ -1497,10 +1497,11 @@ function Get-AdoWikiPage {
     $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
     if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
     $wikiId = $wikiInfo.wikiIdentifier
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
 
     $encodedPath = [Uri]::EscapeDataString($Path)
     $recursion = if ($IncludeSubPages) { 'oneLevel' } else { 'none' }
-    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=$recursion&api-version=7.0"
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=$recursion&api-version=7.0"
 
     $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
     if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
