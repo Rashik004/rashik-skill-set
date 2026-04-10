@@ -587,7 +587,12 @@ function Get-AdoWikiPageVersion {
             return [ordered]@{ exists = $false; etag = $null }
         }
 
-        return (New-AdoErrorObject -Code 'ApiRequestFailed' -Message $_.Exception.Message -StatusCode $statusCode -Uri $Uri)
+        $hint = $null
+        if ($statusCode -eq 401) {
+            $hint = 'Your Azure DevOps session may have expired. Re-authenticate and try again.'
+        }
+
+        return (New-AdoErrorObject -Code 'ApiRequestFailed' -Message $_.Exception.Message -StatusCode $statusCode -Uri $Uri -Hint $hint)
     }
 }
 
