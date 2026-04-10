@@ -1679,9 +1679,10 @@ function Remove-AdoWikiPage {
     $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
     if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
     $wikiId = $wikiInfo.wikiIdentifier
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
 
     $encodedPath = [Uri]::EscapeDataString($Path)
-    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&api-version=7.0"
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&api-version=7.0"
     if ($Comment) {
         $uri += "&comment=$([Uri]::EscapeDataString($Comment))"
     }
