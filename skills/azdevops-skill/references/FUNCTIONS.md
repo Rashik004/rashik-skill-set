@@ -264,3 +264,101 @@ Run the same query across every configured organization and project.
 Search-AdoAllOrgs -Type Bug -State Active
 Search-AdoAllOrgs -AssignedTo 'me@company.com'
 ```
+
+---
+
+## Wiki
+
+All wiki functions accept optional `-Wiki` to target a specific wiki by name or ID.
+If omitted, the project wiki is auto-detected. All functions also accept `-Org` and
+`-Project` to override defaults.
+
+### Get-AdoWikiList
+
+List all wikis in the project.
+
+```powershell
+Get-AdoWikiList
+Get-AdoWikiList -Org contoso -Project WebApp
+```
+
+### Get-AdoWikiPage
+
+Fetch a wiki page by path, including its markdown content.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `-Path` | `string` | Yes | Page path (e.g. `/Architecture/Overview`) |
+| `-Wiki` | `string` | No | Wiki name or ID (auto-detected if omitted) |
+| `-IncludeSubPages` | `switch` | No | Include one level of child pages |
+
+```powershell
+Get-AdoWikiPage -Path '/Architecture/Overview'
+Get-AdoWikiPage -Path '/Setup' -IncludeSubPages
+Get-AdoWikiPage -Path '/Runbook' -Wiki 'MyProject.wiki'
+```
+
+### Get-AdoWikiPageTree
+
+Get the wiki page hierarchy (table of contents) without content.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `-Path` | `string` | No | `/` |
+| `-Wiki` | `string` | No | Auto-detected |
+| `-Depth` | `string` | No | `full` |
+
+Valid `-Depth` values: `oneLevel`, `full`.
+
+```powershell
+Get-AdoWikiPageTree
+Get-AdoWikiPageTree -Path '/Architecture' -Depth oneLevel
+```
+
+### Set-AdoWikiPage
+
+Create or update a wiki page. Automatically detects whether the page exists and
+handles versioning (ETag) for updates.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `-Path` | `string` | Yes | Page path (e.g. `/Notes/Daily`) |
+| `-Content` | `string` | Yes | Markdown content |
+| `-Comment` | `string` | No | Commit comment for the change |
+| `-Wiki` | `string` | No | Wiki name or ID |
+
+```powershell
+Set-AdoWikiPage -Path '/Notes/Daily' -Content '# Daily Notes'
+Set-AdoWikiPage -Path '/Runbook' -Content $md -Comment 'Updated runbook steps'
+```
+
+### Remove-AdoWikiPage
+
+Delete a wiki page by path.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `-Path` | `string` | Yes | Page path |
+| `-Comment` | `string` | No | Commit comment for the deletion |
+| `-Wiki` | `string` | No | Wiki name or ID |
+
+```powershell
+Remove-AdoWikiPage -Path '/Obsolete/OldPage'
+Remove-AdoWikiPage -Path '/Draft' -Comment 'Removing draft page'
+```
+
+### Search-AdoWiki
+
+Full-text search across wiki pages using the Azure DevOps Search API.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `-Query` | `string` | Yes | Search text (supports exact phrases, boolean operators) |
+| `-Wiki` | `string` | No | All wikis |
+| `-Top` | `int` | No | 20 |
+| `-Skip` | `int` | No | 0 |
+
+```powershell
+Search-AdoWiki -Query 'deployment steps'
+Search-AdoWiki -Query '"connection string"' -Wiki 'MyProject.wiki' -Top 10
+```

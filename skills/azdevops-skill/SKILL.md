@@ -1,21 +1,23 @@
 ---
-name: azdevops-skill
+name: azdevops-cli
 description: >
-  PowerShell module for querying Azure DevOps boards, PRs, and sprints via the REST API.
-  Supports multiple organizations and projects under a single identity and uses
+  PowerShell module for querying Azure DevOps boards, PRs, sprints, and wikis via the
+  REST API. Supports multiple organizations and projects under a single identity and uses
   session-scoped Microsoft Entra interactive login via Azure CLI instead of stored PATs.
   All output is structured JSON for piping to AI providers from the CLI.
 
   Use this skill whenever the user mentions Azure DevOps, ADO boards, work items, sprints,
-  pull requests, WIQL queries, or DevOps backlog management from PowerShell or the terminal.
-  Also trigger when the user wants to query bugs, user stories, features, tasks, or epics
-  from their DevOps board, check PR review comments or code diffs, see who is assigned what
-  in a sprint, or pipe DevOps data to an AI tool like Claude, GPT, or Gemini from the CLI.
+  pull requests, wiki pages, WIQL queries, or DevOps backlog management from PowerShell
+  or the terminal. Also trigger when the user wants to query bugs, user stories, features,
+  tasks, or epics from their DevOps board, check PR review comments or code diffs, see who
+  is assigned what in a sprint, read or search wiki documentation, create or update wiki
+  pages, or pipe DevOps data to an AI tool like Claude, GPT, or Gemini from the CLI.
   Even if the user just says "check my board", "what PRs are open", "sprint status",
-  "what's assigned to me in ADO", or "DevOps bugs" - use this skill.
+  "what's assigned to me in ADO", "DevOps bugs", "find in wiki", "read the wiki page",
+  or "update wiki" - use this skill.
 ---
 
-# AzDevOps Skill
+# AzDevOps CLI Skill
 
 A PowerShell 7+ module that wraps the Azure DevOps REST API v7.0 for multi-org,
 multi-project access. Every function emits structured JSON to stdout so any AI
@@ -28,7 +30,38 @@ provider can consume it from the command line.
 - User wants to check active pull requests, code changes, review threads
 - User wants current sprint status or per-user workload breakdown
 - User wants to search across multiple ADO organizations at once
+- User wants to read, search, create, update, or delete wiki pages
+- User wants to browse wiki page hierarchy (table of contents)
 - User wants to pipe DevOps data into an AI CLI tool
+
+## Multi-project disambiguation
+
+When the user has multiple projects configured (check via `Get-AdoOrgs`), project-specific
+requests require knowing which project to target. If the user does not mention a specific
+project in their request, you **must ask them which project they mean** before running the
+command — do not silently fall back to the default project.
+
+**Project-specific operations** (require disambiguation):
+- Work items: `Get-AdoWorkItem`, `Get-AdoWorkItems`, `Get-AdoWorkItemComments`
+- Pull requests: `Get-AdoPullRequests`, `Get-AdoPullRequestDetail`, `Get-AdoPullRequestDiff`
+- Sprints: `Get-AdoCurrentSprint`, `Get-AdoSprintAssignments`
+- User items: `Get-AdoUserWorkItems`
+- Wiki: `Get-AdoWikiList`, `Get-AdoWikiPage`, `Get-AdoWikiPageTree`, `Set-AdoWikiPage`,
+  `Remove-AdoWikiPage`, `Search-AdoWiki`
+
+**Non-project-specific operations** (skip disambiguation):
+- Config/session: `Initialize-AdoConfig`, `Get-AdoOrgs`, `Set-AdoDefault`, `Connect-Ado`,
+  `Disconnect-Ado`, `Get-AdoSession`, `Test-AdoConnection`
+- Cross-org: `Search-AdoAllOrgs` (searches all orgs/projects by design)
+
+**How to disambiguate:**
+1. At the start of the skill, run `Get-AdoOrgs` to check configured projects.
+2. If only one project exists, proceed with it — no need to ask.
+3. If multiple projects exist and the user's request clearly names one (e.g., "check PRs
+   in ilap.flow"), use that project via the `-Project` parameter.
+4. If multiple projects exist and the request is ambiguous, ask the user:
+   *"You have multiple projects configured: [list projects]. Which project should I use?"*
+5. Once the user specifies a project, pass it via `-Project` on the relevant commands.
 
 ## Architecture overview
 
@@ -135,6 +168,12 @@ exported functions. Quick reference:
 | `Get-AdoUserWorkItems -User U` | All active items for a person |
 | `Get-AdoSprintAssignments` | Sprint cards grouped by assignee |
 | `Search-AdoAllOrgs` | Fan same query across every org/project |
+| `Get-AdoWikiList` | List all wikis in the project |
+| `Get-AdoWikiPage -Path P` | Fetch a wiki page with content |
+| `Get-AdoWikiPageTree` | Page hierarchy (table of contents) |
+| `Set-AdoWikiPage -Path P -Content C` | Create or update a wiki page |
+| `Remove-AdoWikiPage -Path P` | Delete a wiki page |
+| `Search-AdoWiki -Query Q` | Full-text search across wiki pages |
 
 ## AI piping pattern
 
@@ -199,6 +238,34 @@ Connect-Ado
 Search-AdoAllOrgs -AssignedTo 'me@co.com' | claude "Group by priority"
 ```
 
+**"Find deployment docs in the wiki"**
+
+```powershell
+Connect-Ado
+Search-AdoWiki -Query 'deployment steps'
+```
+
+**"Read a specific wiki page"**
+
+```powershell
+Connect-Ado
+Get-AdoWikiPage -Path '/Architecture/Overview' | claude "Summarize this page"
+```
+
+**"Browse wiki table of contents"**
+
+```powershell
+Connect-Ado
+Get-AdoWikiPageTree -Depth oneLevel
+```
+
+**"Update a wiki page"**
+
+```powershell
+Connect-Ado
+Set-AdoWikiPage -Path '/Runbook/Deploy' -Content $newContent -Comment 'Updated deploy steps'
+```
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -210,3 +277,5 @@ Search-AdoAllOrgs -AssignedTo 'me@co.com' | claude "Group by priority"
 | `OrganizationNotFound` | Check `Get-AdoOrgs` - name must match exactly |
 | Empty sprint results | Verify team name with `-Team 'Exact Team Name'` |
 | Validation fails after login | Confirm your signed-in work account can access the configured org |
+| `WikiNotFound` | No wikis exist in the project, or specify `-Wiki` with the correct name |
+| Wiki page 409 conflict | Page was modified externally; retry the `Set-AdoWikiPage` call |
