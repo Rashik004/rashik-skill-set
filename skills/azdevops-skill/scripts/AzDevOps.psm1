@@ -1500,13 +1500,32 @@ function Get-AdoWikiPage {
     $encodedWikiId = [Uri]::EscapeDataString($wikiId)
 
     $encodedPath = [Uri]::EscapeDataString($Path)
-    $recursion = if ($IncludeSubPages) { 'oneLevel' } else { 'none' }
-    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=$recursion&api-version=7.0"
 
-    $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
-    if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+    if ($IncludeSubPages) {
+        $contentUri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=none&api-version=7.0"
+        $treeUri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=false&recursionLevel=oneLevel&api-version=7.0"
 
-    $pageData = if ($raw.page) { $raw.page } else { $raw }
+        $contentRaw = Invoke-AdoApi -Uri $contentUri -Headers $ctx.Headers
+        if ($contentRaw.error) { return (ConvertTo-AdoJson -InputObject $contentRaw) }
+
+        $treeRaw = Invoke-AdoApi -Uri $treeUri -Headers $ctx.Headers
+        if ($treeRaw.error) { return (ConvertTo-AdoJson -InputObject $treeRaw) }
+
+        $pageData = if ($contentRaw.page) { $contentRaw.page } else { $contentRaw }
+        $treeData = if ($treeRaw.page) { $treeRaw.page } else { $treeRaw }
+
+        if ($null -ne $treeData.subPages) {
+            $pageData.subPages = $treeData.subPages
+        }
+    }
+    else {
+        $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=none&api-version=7.0"
+
+        $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
+        if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+
+        $pageData = if ($raw.page) { $raw.page } else { $raw }
+    }
     $page = Format-WikiPage -Page $pageData -IncludeContent
 
     ConvertTo-AdoJson -InputObject ([ordered]@{
