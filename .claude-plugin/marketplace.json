@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "rashik-skills",
+  "description": "Rashik Hasnat's Claude Code skill collection",
+  "owner": {
+    "name": "Rashik Hasnat",
+    "email": "raja@promineo.no"
+  },
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "azdevops",
+      "source": "./azdevops",
+      "description": "Query Azure DevOps boards, PRs, sprints, and wikis from PowerShell via Microsoft Entra (no PATs).",
+      "category": "devops",
+      "tags": ["azure-devops", "powershell", "ado", "boards", "pull-requests", "wiki"]
+    }
+  ]
+}

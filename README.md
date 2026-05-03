@@ -1,14 +1,33 @@
 # rashik-skill-set
 
-Claude Code skills for everyday work tools. Setup is technical and one-time; daily use is just asking Claude.
+A Claude Code plugin marketplace of skills for everyday work tools.
 
-## Skills
+## Install
 
-### AzDevOps CLI
+In Claude Code:
 
-Talk to Azure DevOps through Claude — boards, pull requests, sprints, and wikis. No PATs stored; auth runs through Azure CLI / Microsoft Entra. Full details: [`skills/azdevops-skill/README.md`](skills/azdevops-skill/README.md).
+```
+/plugin marketplace add Rashik-Hasnat/rashik-skill-set
+/plugin install azdevops@rashik-skills
+```
 
-#### What you can ask
+Then ask Claude things like *"What's in the current sprint?"* or *"Summarize PR 500."*
+
+To get updates later:
+
+```
+/plugin marketplace update rashik-skills
+```
+
+## Skills in this marketplace
+
+| Plugin | What it does |
+|---|---|
+| [`azdevops`](plugins/azdevops/README.md) | Query Azure DevOps boards, PRs, sprints, and wikis from PowerShell. No PATs — auth runs through Azure CLI / Microsoft Entra. |
+
+More skills will land here over time.
+
+## What you can ask (azdevops plugin)
 
 - *"Find me all active bugs assigned to Rashik."*
 - *"What's the status of card 42351?"*
@@ -19,18 +38,15 @@ Talk to Azure DevOps through Claude — boards, pull requests, sprints, and wiki
 - *"Find me the wiki page that explains the codebase."*
 - *"Update the runbook page with these new deploy steps."*
 
-See the [skill README](skills/azdevops-skill/README.md) for the full prompt catalog.
+See the [plugin README](plugins/azdevops/README.md) for the full prompt catalog, configuration, troubleshooting, and cmdlet reference.
 
-#### Setup quickstart
+## Requirements
 
-Requirements: PowerShell 7+, Azure CLI on `PATH`, access to an Azure DevOps Services organization.
+The `azdevops` plugin needs PowerShell 7+, Azure CLI on `PATH`, and access to an Azure DevOps Services organization. First-time setup runs through:
 
 ```powershell
-Import-Module .\skills\azdevops-skill\scripts\AzDevOps.psd1 -Force
-.\skills\azdevops-skill\scripts\Setup-AzDevOps.ps1
 Connect-Ado
+Initialize-AdoConfig -Orgs @(@{ Name='contoso'; Projects=@('WebApp') }) -DefaultOrg 'contoso' -DefaultProject 'WebApp'
 ```
 
-The wizard collects orgs, projects, defaults, and optional tenant ID, then can sign you in.
-
-For configuration without the wizard, troubleshooting, device-code login, and the cmdlet reference, see [`skills/azdevops-skill/README.md`](skills/azdevops-skill/README.md).
+Full setup details: [`plugins/azdevops/README.md`](plugins/azdevops/README.md).

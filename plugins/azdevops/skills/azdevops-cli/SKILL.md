@@ -86,16 +86,17 @@ Azure CLI-backed Microsoft Entra sign-in for the current PowerShell session.
 
 ### Step 1 - Install the module
 
-From the repo root, import the module manifest from the `scripts/` folder:
+The PowerShell module ships inside this plugin. Import it using the
+`$env:CLAUDE_PLUGIN_ROOT` env var that Claude Code sets when the plugin is active:
 
 ```powershell
-Import-Module ./scripts/AzDevOps.psd1
+Import-Module "$env:CLAUDE_PLUGIN_ROOT/skills/azdevops-cli/scripts/AzDevOps.psd1" -Force
 ```
 
 Or run the interactive wizard:
 
 ```powershell
-./scripts/Setup-AzDevOps.ps1
+& "$env:CLAUDE_PLUGIN_ROOT/skills/azdevops-cli/scripts/Setup-AzDevOps.ps1"
 ```
 
 ### Step 2 - Initialize config

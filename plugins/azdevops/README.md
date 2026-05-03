@@ -87,10 +87,17 @@ Not stored:
 
 ## Install
 
-From the repo root:
+This plugin is installed via the marketplace:
+
+```
+/plugin marketplace add Rashik-Hasnat/rashik-skill-set
+/plugin install azdevops@rashik-skills
+```
+
+Claude Code copies the plugin to its cache and exposes the path as `$env:CLAUDE_PLUGIN_ROOT` while the plugin is active. Claude imports the module for you when you trigger the skill, but you can also import it manually inside a Claude session:
 
 ```powershell
-Import-Module .\scripts\AzDevOps.psd1 -Force
+Import-Module "$env:CLAUDE_PLUGIN_ROOT/skills/azdevops-cli/scripts/AzDevOps.psd1" -Force
 ```
 
 ## Configure
@@ -98,7 +105,7 @@ Import-Module .\scripts\AzDevOps.psd1 -Force
 ### Option 1 — interactive wizard
 
 ```powershell
-.\scripts\Setup-AzDevOps.ps1
+& "$env:CLAUDE_PLUGIN_ROOT/skills/azdevops-cli/scripts/Setup-AzDevOps.ps1"
 ```
 
 Asks for orgs, projects, defaults, optional tenant ID, and can call `Connect-Ado` at the end.

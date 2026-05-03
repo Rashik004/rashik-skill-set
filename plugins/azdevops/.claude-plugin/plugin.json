@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "azdevops",
+  "description": "PowerShell skill for Azure DevOps boards, PRs, sprints, wikis. Microsoft Entra interactive auth via Azure CLI.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Rashik Hasnat",
+    "email": "raja@promineo.no"
+  },
+  "homepage": "https://github.com/Rashik-Hasnat/rashik-skill-set",
+  "repository": "https://github.com/Rashik-Hasnat/rashik-skill-set",
+  "license": "MIT",
+  "keywords": ["azure-devops", "powershell", "ado"]
+}
