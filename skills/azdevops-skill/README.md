@@ -1,32 +1,84 @@
 # AzDevOps CLI
 
-PowerShell module for querying Azure DevOps boards, pull requests, and sprint data from the terminal.
+A Claude Code skill for working with Azure DevOps boards, pull requests, sprints, and wikis through natural-language prompts. Authentication is brokered by Azure CLI / Microsoft Entra — no PATs stored.
 
-This version uses **Azure CLI-backed Microsoft Entra login** for authentication. It does **not** store PATs in the skill config.
+## What you can ask
+
+Once the skill is loaded and you're connected, just ask Claude. No cmdlets to memorize.
+
+### Work items / boards
+
+- *"Find me all active bugs assigned to Rashik."*
+- *"What's the status of card 42351?"*
+- *"Show me every P0 feature in the fabrikam org."*
+- *"List all user stories I have open."*
+- *"What are the latest comments on bug 9182?"*
+
+### Pull requests
+
+- *"Check the current status of all PRs created by Jane."*
+- *"Show me active PRs in the api repo."*
+- *"Summarize reviewer feedback on PR 500."*
+- *"What changed in `Startup.cs` in PR 987?"*
+- *"Are there PRs waiting on my review?"*
+
+### Sprint
+
+- *"What's in the current sprint?"*
+- *"Who's overloaded this sprint?"*
+- *"Show me sprint status grouped by assignee."*
+- *"What's blocking the sprint right now?"*
+
+### Cross-org
+
+- *"Find all my open items across every org."*
+- *"Show me active bugs in every project I'm in."*
+
+### Wiki
+
+- *"Find me the wiki page that explains the codebase."*
+- *"Search the wiki for deployment steps."*
+- *"Show me the architecture overview wiki."*
+- *"Update the runbook page with these new deploy steps."*
+- *"List every wiki in this project."*
+
+### Session / config
+
+- *"Am I connected to Azure DevOps?"*
+- *"Switch my default project to Backend."*
+- *"Disconnect from ADO."*
+
+### Multi-project note
+
+If you have several projects configured, Claude will ask which one to use unless your prompt names it (*"...in fabrikam"*). To stop being asked, set a default:
+
+```powershell
+Set-AdoDefault -Org 'contoso' -Project 'Backend'
+```
 
 ## Requirements
 
 - PowerShell 7+
-- Azure CLI installed and available on `PATH`
+- Azure CLI installed and on `PATH`
 - Access to one or more Azure DevOps Services organizations
-- A work or school account that can sign in through Microsoft Entra
+- Work or school account that can sign in through Microsoft Entra
 
-## What Gets Stored
+## What gets stored
 
-The skill stores only configuration in:
+Configuration only, at:
 
 ```text
 ~/.azdevops/config.json
 ```
 
-That file contains:
+Contents:
 
 - configured organization names
 - configured project names
 - default org/project
 - optional preferred tenant ID
 
-It does **not** store:
+Not stored:
 
 - PATs
 - access tokens
@@ -41,46 +93,26 @@ From the repo root:
 Import-Module .\scripts\AzDevOps.psd1 -Force
 ```
 
-You can also run the interactive setup wizard:
-
-```powershell
-.\scripts\Setup-AzDevOps.ps1
-```
-
 ## Configure
 
-### Option 1: Interactive setup
-
-Run:
+### Option 1 — interactive wizard
 
 ```powershell
 .\scripts\Setup-AzDevOps.ps1
 ```
 
-The wizard will ask for:
+Asks for orgs, projects, defaults, optional tenant ID, and can call `Connect-Ado` at the end.
 
-- organization names
-- project names for each org
-- default organization
-- default project
-- optional tenant ID
-
-At the end, it can also start sign-in for you by calling `Connect-Ado`.
-
-### Option 2: Manual setup
-
-Import the module and create config yourself:
+### Option 2 — manual
 
 ```powershell
-Import-Module .\scripts\AzDevOps.psd1 -Force
-
 Initialize-AdoConfig -Orgs @(
     @{ Name='contoso'; Projects=@('WebApp','Backend') },
     @{ Name='fabrikam'; Projects=@('MobileApp') }
 ) -DefaultOrg 'contoso' -DefaultProject 'WebApp'
 ```
 
-If you want to prefer a specific tenant:
+Pin a tenant if needed:
 
 ```powershell
 Initialize-AdoConfig -Orgs @(
@@ -90,42 +122,27 @@ Initialize-AdoConfig -Orgs @(
 
 ## Authenticate
 
-### Normal interactive sign-in
+Browser sign-in:
 
 ```powershell
 Connect-Ado
 ```
 
-Behavior:
-
-- reuses an existing Azure CLI login if one is already available
-- otherwise runs `az login`
-- fetches an Azure DevOps access token through Azure CLI
-- validates access against your default org when possible
-
-### Device code sign-in
-
-If browser-based sign-in is unavailable:
+Device code (no browser available):
 
 ```powershell
 Connect-Ado -UseDeviceCode
 ```
 
-This uses:
-
-```powershell
-az login --use-device-code
-```
-
-### Tenant-specific sign-in
+Specific tenant:
 
 ```powershell
 Connect-Ado -TenantId '00000000-0000-0000-0000-000000000000'
 ```
 
-## Verify The Setup
+`Connect-Ado` reuses an existing Azure CLI login if there is one, otherwise calls `az login` for you.
 
-Run these after configuring:
+## Verify
 
 ```powershell
 Get-AdoOrgs
@@ -133,110 +150,46 @@ Get-AdoSession
 Test-AdoConnection
 ```
 
-You should then be able to run normal queries such as:
+Once those pass, switch back to talking to Claude.
 
-```powershell
-Get-AdoCurrentSprint
-Get-AdoWorkItems -Type Bug -State Active
-Get-AdoPullRequests
-```
+## Under the hood
 
-## Common Usage
+Claude maps every prompt to a PowerShell cmdlet from this module and pipes the JSON result back into context. You almost never need to type the cmdlet yourself, but the mapping looks like this:
 
-```powershell
-Get-AdoCurrentSprint | claude "Summarize this sprint"
-Get-AdoPullRequestDetail -RepoName api -PrId 123 | openai "Review this PR"
-Search-AdoAllOrgs -AssignedTo 'me@company.com'
-```
+| Prompt | Cmdlet Claude runs |
+|---|---|
+| *"Active bugs assigned to Rashik"* | `Get-AdoWorkItems -Type Bug -State Active -AssignedTo 'rashik@...'` |
+| *"Status of card 42351"* | `Get-AdoWorkItem -Id 42351` |
+| *"PRs created by Jane"* | `Get-AdoPullRequests -CreatedBy 'Jane'` |
+| *"Search wiki for deployment steps"* | `Search-AdoWiki -Query 'deployment steps'` |
 
-## Helpful Commands
-
-```powershell
-Get-AdoOrgs
-Set-AdoDefault -Org 'contoso' -Project 'Backend'
-Get-AdoSession
-Disconnect-Ado
-```
+Full cmdlet list and parameters: see [`SKILL.md`](./SKILL.md) and [`references/FUNCTIONS.md`](./references/FUNCTIONS.md).
 
 ## Troubleshooting
 
-### `AzureCliNotFound`
-
-Azure CLI is missing or not on `PATH`.
-
-Fix:
-
-```powershell
-az --version
-```
-
-If that fails, install Azure CLI first.
-
-### `AzureCliLoginFailed`
-
-Azure CLI could not sign you in.
-
-Try:
-
-```powershell
-az login
-Connect-Ado
-```
-
-Or:
-
-```powershell
-Connect-Ado -UseDeviceCode
-```
-
-### `NotConnected`
-
-No active session is available.
-
-Fix:
-
-```powershell
-Connect-Ado
-```
-
-### `ReauthRequired`
-
-The Azure CLI session or token expired.
-
-Fix:
-
-```powershell
-Connect-Ado
-```
-
-### `OrganizationNotFound`
-
-The org name passed to a command does not match what is in config.
-
-Check:
-
-```powershell
-Get-AdoOrgs
-```
-
-### Validation fails after login
-
-Your signed-in account may not have access to the configured Azure DevOps organization.
-
-Check:
-
-- the signed-in Azure CLI account
-- the tenant you used
-- the org name in config
-- your Azure DevOps org access
+| Symptom | Fix |
+|---|---|
+| `NotConnected` | Run `Connect-Ado` |
+| `ReauthRequired` | Run `Connect-Ado` again |
+| `ConfigNotFound` | Run `Initialize-AdoConfig` to create `~/.azdevops/config.json` |
+| `NoDefaultOrg` / `NoDefaultProject` | Run `Set-AdoDefault -Org X -Project Y` or pass `-Org`/`-Project` per call |
+| `OrganizationNotFound` | Check `Get-AdoOrgs` — name must match exactly |
+| `ProjectNotFound` | Project not configured under that org; add it to config or fix the name |
+| `AzureCliNotFound` | Install Azure CLI and ensure `az` is on `PATH` (`az --version`) |
+| `AzureCliLoginFailed` | Run `az login` manually, then `Connect-Ado` again |
+| `AzureCliTokenFailed` / `AzureCliAccountUnavailable` | Run `Connect-Ado` again; if still failing, `az logout` then `az login` |
+| `ApiRequestFailed` | Check network and that your work account has access to the org/project |
+| `WikiNotFound` | No wikis exist in the project, or pass `-Wiki` with the correct name |
+| Wiki page 409 conflict | Page changed externally — retry the update |
+| Validation fails after login | Confirm signed-in account, tenant, org name, and Azure DevOps access |
 
 ## Notes
 
-- This skill targets **Azure DevOps Services**, not Azure DevOps Server/on-prem.
-- Existing legacy configs that still contain PAT fields are tolerated, but PATs are ignored and removed when config is rewritten.
-- `Disconnect-Ado` clears the module session state only. It does not run `az logout`.
+- Targets **Azure DevOps Services**, not Azure DevOps Server / on-prem.
+- Legacy configs with PAT fields are tolerated, but PATs are ignored and stripped on rewrite.
+- `Disconnect-Ado` clears the in-memory module session only — it does not call `az logout`.
 
 ## Reference
 
-- Skill details: [SKILL.md](./SKILL.md)
-- Command reference: [references/FUNCTIONS.md](./references/FUNCTIONS.md)
+- Skill instructions for Claude: [`SKILL.md`](./SKILL.md)
+- Cmdlet parameter reference: [`references/FUNCTIONS.md`](./references/FUNCTIONS.md)

@@ -56,12 +56,13 @@ command — do not silently fall back to the default project.
 
 **How to disambiguate:**
 1. At the start of the skill, run `Get-AdoOrgs` to check configured projects.
-2. If only one project exists, proceed with it — no need to ask.
+2. If only one project is configured across all orgs, write it down and proceed with it — no need to ask.
 3. If multiple projects exist and the user's request clearly names one (e.g., "check PRs
    in ilap.flow"), use that project via the `-Project` parameter.
 4. If multiple projects exist and the request is ambiguous, ask the user:
    *"You have multiple projects configured: [list projects]. Which project should I use?"*
 5. Once the user specifies a project, pass it via `-Project` on the relevant commands.
+6. If the user wants to stop being asked, suggest `Set-AdoDefault -Org <name> -Project <name>` to update the configured default.
 
 ## Architecture overview
 
@@ -85,16 +86,16 @@ Azure CLI-backed Microsoft Entra sign-in for the current PowerShell session.
 
 ### Step 1 - Install the module
 
-Copy the `scripts/` folder contents into a directory and import:
+From the repo root, import the module manifest from the `scripts/` folder:
 
 ```powershell
-Import-Module ./AzDevOps.psd1
+Import-Module ./scripts/AzDevOps.psd1
 ```
 
 Or run the interactive wizard:
 
 ```powershell
-./Setup-AzDevOps.ps1
+./scripts/Setup-AzDevOps.ps1
 ```
 
 ### Step 2 - Initialize config
@@ -197,6 +198,8 @@ All data responses follow a consistent envelope:
 }
 ```
 
+`context` may include function-specific fields like `wiql`, `team`, `iteration`, `repo`, `prId`.
+
 Errors also return JSON:
 
 ```json
@@ -272,9 +275,14 @@ Set-AdoWikiPage -Path '/Runbook/Deploy' -Content $newContent -Comment 'Updated d
 |---|---|
 | `NotConnected` | Run `Connect-Ado` |
 | `ReauthRequired` | Run `Connect-Ado` again |
+| `ConfigNotFound` | Run `Initialize-AdoConfig` to create `~/.azdevops/config.json` |
+| `NoDefaultOrg` / `NoDefaultProject` | Run `Set-AdoDefault -Org X -Project Y` or pass `-Org`/`-Project` per call |
+| `OrganizationNotFound` | Check `Get-AdoOrgs` - name must match exactly |
+| `ProjectNotFound` | Project not configured under that org; add it to config or fix the name |
 | `AzureCliNotFound` | Install Azure CLI and make sure `az` is on `PATH` |
 | `AzureCliLoginFailed` | Run `az login` manually, then try `Connect-Ado` again |
-| `OrganizationNotFound` | Check `Get-AdoOrgs` - name must match exactly |
+| `AzureCliTokenFailed` / `AzureCliAccountUnavailable` | Run `Connect-Ado` again; if it still fails, run `az logout` then `az login` |
+| `ApiRequestFailed` | Check network and that your work account has access to the org/project |
 | Empty sprint results | Verify team name with `-Team 'Exact Team Name'` |
 | Validation fails after login | Confirm your signed-in work account can access the configured org |
 | `WikiNotFound` | No wikis exist in the project, or specify `-Wiki` with the correct name |
