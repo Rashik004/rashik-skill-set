@@ -536,6 +536,91 @@ function Format-WorkItem {
     }
 }
 
+# ── Private Wiki Helpers ──
+
+function Resolve-AdoWikiIdentifier {
+    param(
+        [string] $Wiki,
+        [Parameter(Mandatory)][PSCustomObject] $Context
+    )
+
+    if ($Wiki) {
+        return [ordered]@{ wikiIdentifier = $Wiki }
+    }
+
+    $uri = "$($Context.BaseUrl)/$($Context.Project)/_apis/wiki/wikis?api-version=7.0"
+    $result = Invoke-AdoApi -Uri $uri -Headers $Context.Headers
+    if ($result.error) { return $result }
+
+    if (-not $result.value -or $result.value.Count -eq 0) {
+        return (New-AdoErrorObject -Code 'WikiNotFound' -Message 'No wikis found in this project.' -Hint 'Create a wiki in Azure DevOps or specify -Wiki with the wiki name or ID.')
+    }
+
+    $projectWiki = @($result.value | Where-Object { $_.type -eq 'projectWiki' } | Select-Object -First 1)
+    if ($projectWiki.Count -gt 0) {
+        return [ordered]@{ wikiIdentifier = $projectWiki[0].name }
+    }
+
+    return [ordered]@{ wikiIdentifier = $result.value[0].name }
+}
+
+function Get-AdoWikiPageVersion {
+    param(
+        [Parameter(Mandatory)][string] $Uri,
+        [Parameter(Mandatory)][hashtable] $Headers
+    )
+
+    try {
+        $response = Invoke-WebRequest -Uri $Uri -Headers $Headers -Method GET -ErrorAction Stop
+        $etag = $response.Headers['ETag']
+        if ($etag -is [array]) { $etag = $etag[0] }
+        return [ordered]@{ exists = $true; etag = $etag }
+    } catch {
+        $statusCode = 0
+        try {
+            if ($_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+        } catch {}
+
+        if ($statusCode -eq 404) {
+            return [ordered]@{ exists = $false; etag = $null }
+        }
+
+        $hint = $null
+        if ($statusCode -eq 401) {
+            $hint = 'Your Azure DevOps session may have expired. Re-authenticate and try again.'
+        }
+
+        return (New-AdoErrorObject -Code 'ApiRequestFailed' -Message $_.Exception.Message -StatusCode $statusCode -Uri $Uri -Hint $hint)
+    }
+}
+
+function Format-WikiPage {
+    param(
+        [Parameter(Mandatory)][object] $Page,
+        [switch] $IncludeContent
+    )
+
+    $formatted = [ordered]@{
+        id       = $Page.id
+        path     = $Page.path
+        order    = $Page.order
+        gitItemPath = $Page.gitItemPath
+        url      = $Page.remoteUrl
+    }
+
+    if ($IncludeContent -and $null -ne $Page.content) {
+        $formatted.content = $Page.content
+    }
+
+    if ($Page.subPages -and $Page.subPages.Count -gt 0) {
+        $formatted.subPages = @($Page.subPages | ForEach-Object { Format-WikiPage -Page $_ })
+    }
+
+    $formatted
+}
+
 function Initialize-AdoConfig {
     <#
     .SYNOPSIS
@@ -1341,6 +1426,371 @@ function Search-AdoAllOrgs {
     }) -Depth 8
 }
 
+# ── Wiki Functions ──
+
+function Get-AdoWikiList {
+    <#
+    .SYNOPSIS
+        List all wikis in the project.
+    .EXAMPLE
+        Get-AdoWikiList
+    #>
+    [CmdletBinding()]
+    param(
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis?api-version=7.0"
+    $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
+    if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+
+    $wikis = @($raw.value | ForEach-Object {
+        [ordered]@{
+            id       = $_.id
+            name     = $_.name
+            type     = $_.type
+            url      = $_.url
+            versions = @($_.versions | ForEach-Object { $_.version })
+        }
+    })
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org     = $ctx.Org
+            project = $ctx.Project
+        }
+        count = $wikis.Count
+        wikis = $wikis
+    }) -Depth 5
+}
+
+function Get-AdoWikiPage {
+    <#
+    .SYNOPSIS
+        Fetch a wiki page by path, including its content.
+    .PARAMETER Path
+        Page path (e.g. '/Architecture/Overview').
+    .PARAMETER Wiki
+        Wiki name or ID. If omitted the project wiki is used automatically.
+    .PARAMETER IncludeSubPages
+        When set, includes one level of child pages in the response.
+    .EXAMPLE
+        Get-AdoWikiPage -Path '/Architecture/Overview'
+        Get-AdoWikiPage -Path '/Setup' -IncludeSubPages -Wiki 'MyProject.wiki'
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [string] $Wiki,
+        [switch] $IncludeSubPages,
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
+    if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
+    $wikiId = $wikiInfo.wikiIdentifier
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
+
+    $encodedPath = [Uri]::EscapeDataString($Path)
+
+    if ($IncludeSubPages) {
+        $contentUri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=none&api-version=7.0"
+        $treeUri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=false&recursionLevel=oneLevel&api-version=7.0"
+
+        $contentRaw = Invoke-AdoApi -Uri $contentUri -Headers $ctx.Headers
+        if ($contentRaw.error) { return (ConvertTo-AdoJson -InputObject $contentRaw) }
+
+        $treeRaw = Invoke-AdoApi -Uri $treeUri -Headers $ctx.Headers
+        if ($treeRaw.error) { return (ConvertTo-AdoJson -InputObject $treeRaw) }
+
+        $pageData = if ($contentRaw.page) { $contentRaw.page } else { $contentRaw }
+        $treeData = if ($treeRaw.page) { $treeRaw.page } else { $treeRaw }
+
+        if ($null -ne $treeData.subPages) {
+            $pageData.subPages = $treeData.subPages
+        }
+    }
+    else {
+        $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$wikiId/pages?path=$encodedPath&includeContent=true&recursionLevel=none&api-version=7.0"
+
+        $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
+        if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+
+        $pageData = if ($raw.page) { $raw.page } else { $raw }
+    }
+    $page = Format-WikiPage -Page $pageData -IncludeContent
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org     = $ctx.Org
+            project = $ctx.Project
+            wiki    = $wikiId
+        }
+        page = $page
+    }) -Depth 8
+}
+
+function Get-AdoWikiPageTree {
+    <#
+    .SYNOPSIS
+        Get the wiki page hierarchy (table of contents) without content.
+    .PARAMETER Path
+        Root path for the tree (default '/').
+    .PARAMETER Depth
+        Recursion depth: 'oneLevel' or 'full' (default 'full').
+    .EXAMPLE
+        Get-AdoWikiPageTree
+        Get-AdoWikiPageTree -Path '/Architecture' -Depth oneLevel
+    #>
+    [CmdletBinding()]
+    param(
+        [string] $Path = '/',
+        [string] $Wiki,
+        [ValidateSet('oneLevel', 'full')]
+        [string] $Depth = 'full',
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
+    if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
+    $wikiId = $wikiInfo.wikiIdentifier
+
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
+    $encodedPath = [Uri]::EscapeDataString($Path)
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&recursionLevel=$Depth&api-version=7.0"
+
+    $raw = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers
+    if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+
+    $pageData = if ($raw.page) { $raw.page } else { $raw }
+    $tree = Format-WikiPage -Page $pageData
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org      = $ctx.Org
+            project  = $ctx.Project
+            wiki     = $wikiId
+            rootPath = $Path
+        }
+        tree = $tree
+    }) -Depth 20
+}
+
+function Set-AdoWikiPage {
+    <#
+    .SYNOPSIS
+        Create or update a wiki page. Automatically detects whether the page
+        exists and handles versioning (ETag) for updates.
+    .PARAMETER Path
+        Page path (e.g. '/Architecture/NewPage').
+    .PARAMETER Content
+        Markdown content for the page.
+    .PARAMETER Comment
+        Optional commit comment for the change.
+    .EXAMPLE
+        Set-AdoWikiPage -Path '/Notes/Daily' -Content '# Daily Notes'
+        Set-AdoWikiPage -Path '/Runbook' -Content $md -Comment 'Updated runbook steps'
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $Content,
+        [string] $Comment,
+        [string] $Wiki,
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
+    if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
+    $wikiId = $wikiInfo.wikiIdentifier
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
+
+    $encodedPath = [Uri]::EscapeDataString($Path)
+    $pageUri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&api-version=7.0"
+    if ($Comment) {
+        $pageUri += "&comment=$([Uri]::EscapeDataString($Comment))"
+    }
+
+    # Check if page exists to get ETag for update vs create
+    $versionInfo = Get-AdoWikiPageVersion -Uri $pageUri -Headers $ctx.Headers
+    if ($versionInfo.error) { return (ConvertTo-AdoJson -InputObject $versionInfo) }
+
+    $headers = @{}
+    foreach ($key in $ctx.Headers.Keys) { $headers[$key] = $ctx.Headers[$key] }
+
+    $isUpdate = $versionInfo.exists
+    if ($isUpdate -and $versionInfo.etag) {
+        $headers['If-Match'] = $versionInfo.etag
+    }
+
+    $bodyJson = @{ content = $Content } | ConvertTo-Json -Depth 4
+
+    try {
+        $response = Invoke-RestMethod -Uri $pageUri -Headers $headers -Method PUT -Body $bodyJson -ErrorAction Stop
+    } catch {
+        $statusCode = 0
+        try {
+            if ($_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+        } catch {}
+
+        $hint = $null
+        if ($statusCode -eq 401) { $hint = 'Run Connect-Ado to sign in again.' }
+        if ($statusCode -eq 409) { $hint = 'Page was modified by another user. Retry the operation.' }
+
+        return (ConvertTo-AdoJson -InputObject (New-AdoErrorObject -Code 'ApiRequestFailed' -Message $_.Exception.Message -Hint $hint -StatusCode $statusCode -Uri $pageUri))
+    }
+
+    $pageData = if ($response.page) { $response.page } else { $response }
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org     = $ctx.Org
+            project = $ctx.Project
+            wiki    = $wikiId
+        }
+        action = if ($isUpdate) { 'updated' } else { 'created' }
+        page   = [ordered]@{
+            path        = $pageData.path
+            gitItemPath = $pageData.gitItemPath
+            order       = $pageData.order
+        }
+    }) -Depth 6
+}
+
+function Remove-AdoWikiPage {
+    <#
+    .SYNOPSIS
+        Delete a wiki page by path.
+    .PARAMETER Comment
+        Optional commit comment for the deletion.
+    .EXAMPLE
+        Remove-AdoWikiPage -Path '/Obsolete/OldPage'
+        Remove-AdoWikiPage -Path '/Draft' -Comment 'Removing draft page'
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [string] $Comment,
+        [string] $Wiki,
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $wikiInfo = Resolve-AdoWikiIdentifier -Wiki $Wiki -Context $ctx
+    if ($wikiInfo.error) { return (ConvertTo-AdoJson -InputObject $wikiInfo) }
+    $wikiId = $wikiInfo.wikiIdentifier
+    $encodedWikiId = [Uri]::EscapeDataString($wikiId)
+
+    $encodedPath = [Uri]::EscapeDataString($Path)
+    $uri = "$($ctx.BaseUrl)/$($ctx.Project)/_apis/wiki/wikis/$encodedWikiId/pages?path=$encodedPath&api-version=7.0"
+    if ($Comment) {
+        $uri += "&comment=$([Uri]::EscapeDataString($Comment))"
+    }
+
+    $result = Invoke-AdoApi -Uri $uri -Headers $ctx.Headers -Method DELETE
+    if ($result.error) { return (ConvertTo-AdoJson -InputObject $result) }
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org     = $ctx.Org
+            project = $ctx.Project
+            wiki    = $wikiId
+        }
+        deleted = $true
+        path    = $Path
+    }) -Depth 5
+}
+
+function Search-AdoWiki {
+    <#
+    .SYNOPSIS
+        Full-text search across wiki pages. Uses the Azure DevOps Search API.
+    .PARAMETER Query
+        Search text (supports ADO search syntax: exact phrases, boolean operators).
+    .PARAMETER Wiki
+        Limit search to a specific wiki name. If omitted, searches all wikis.
+    .PARAMETER Top
+        Max results (default 20).
+    .PARAMETER Skip
+        Number of results to skip for pagination (default 0).
+    .EXAMPLE
+        Search-AdoWiki -Query 'deployment steps'
+        Search-AdoWiki -Query '"connection string"' -Wiki 'MyProject.wiki' -Top 10
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Query,
+        [string] $Wiki,
+        [int] $Top = 20,
+        [int] $Skip = 0,
+        [string] $Org,
+        [string] $Project
+    )
+
+    $ctx = Resolve-AdoContext -Org $Org -Project $Project
+    if ($ctx.error) { return (ConvertTo-AdoJson -InputObject $ctx) }
+
+    $searchUri = "https://almsearch.dev.azure.com/$($ctx.Org)/$($ctx.Project)/_apis/search/wikisearchresults?api-version=7.0"
+
+    $body = [ordered]@{
+        searchText = $Query
+        '$top'     = $Top
+        '$skip'    = $Skip
+    }
+
+    if ($Wiki) {
+        $body.filters = @{ Wiki = @($Wiki) }
+    }
+
+    $raw = Invoke-AdoApi -Uri $searchUri -Headers $ctx.Headers -Method POST -Body $body
+    if ($raw.error) { return (ConvertTo-AdoJson -InputObject $raw) }
+
+    $results = @($raw.results | ForEach-Object {
+        [ordered]@{
+            wiki       = $_.wiki.name
+            path       = $_.path
+            fileName   = $_.fileName
+            highlights = @($_.hits | ForEach-Object {
+                [ordered]@{
+                    field      = $_.fieldReferenceName
+                    highlights = $_.highlights
+                }
+            })
+        }
+    })
+
+    ConvertTo-AdoJson -InputObject ([ordered]@{
+        context = [ordered]@{
+            org     = $ctx.Org
+            project = $ctx.Project
+            query   = $Query
+        }
+        count   = $raw.count
+        results = $results
+    }) -Depth 8
+}
+
 Export-ModuleMember -Function @(
     'Initialize-AdoConfig'
     'Get-AdoOrgs'
@@ -1359,4 +1809,10 @@ Export-ModuleMember -Function @(
     'Get-AdoUserWorkItems'
     'Get-AdoSprintAssignments'
     'Search-AdoAllOrgs'
+    'Get-AdoWikiList'
+    'Get-AdoWikiPage'
+    'Get-AdoWikiPageTree'
+    'Set-AdoWikiPage'
+    'Remove-AdoWikiPage'
+    'Search-AdoWiki'
 )
