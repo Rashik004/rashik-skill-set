@@ -7,7 +7,7 @@ A Claude Code plugin marketplace of skills for everyday work tools.
 In Claude Code:
 
 ```
-/plugin marketplace add Rashik-Hasnat/rashik-skill-set
+/plugin marketplace add https://github.com/Rashik004/rashik-skill-set
 /plugin install azdevops@rashik-skills
 ```
 
