@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "azdevops",
-      "source": "./azdevops",
+      "source": "./plugins/azdevops",
       "description": "Query Azure DevOps boards, PRs, sprints, and wikis from PowerShell via Microsoft Entra (no PATs).",
       "category": "devops",
       "tags": ["azure-devops", "powershell", "ado", "boards", "pull-requests", "wiki"]
