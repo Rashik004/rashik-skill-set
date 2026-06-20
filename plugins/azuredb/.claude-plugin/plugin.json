@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
-  "name": "azdevops",
-  "description": "PowerShell skill for Azure DevOps boards, PRs, sprints, wikis. Microsoft Entra interactive auth via Azure CLI.",
+  "name": "azuredb",
+  "description": "Sync an Azure SQL database down to a local SQL Server (schema + data) via a BACPAC export/import with SqlPackage. One-way: Azure overwrites local.",
   "version": "1.0.0",
   "author": {
     "name": "Rashik Hasnat",
@@ -10,5 +10,5 @@
   "homepage": "https://github.com/Rashik004/rashik-skill-set",
   "repository": "https://github.com/Rashik004/rashik-skill-set",
   "license": "MIT",
-  "keywords": ["azure-devops", "powershell", "ado"]
+  "keywords": ["azure-sql", "sqlpackage", "bacpac", "powershell", "database-sync", "localdb"]
 }
