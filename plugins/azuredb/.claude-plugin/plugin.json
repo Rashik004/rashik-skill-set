@@ -7,8 +7,8 @@
     "name": "Rashik Hasnat",
     "email": "raja@promineo.no"
   },
-  "homepage": "https://github.com/Rashik-Hasnat/rashik-skill-set",
-  "repository": "https://github.com/Rashik-Hasnat/rashik-skill-set",
+  "homepage": "https://github.com/Rashik004/rashik-skill-set",
+  "repository": "https://github.com/Rashik004/rashik-skill-set",
   "license": "MIT",
   "keywords": ["azure-sql", "sqlpackage", "bacpac", "powershell", "database-sync", "localdb"]
 }

@@ -90,7 +90,7 @@ Not stored:
 This plugin is installed via the marketplace:
 
 ```
-/plugin marketplace add Rashik-Hasnat/rashik-skill-set
+/plugin marketplace add Rashik004/rashik-skill-set
 /plugin install azdevops@rashik-skills
 ```
 
