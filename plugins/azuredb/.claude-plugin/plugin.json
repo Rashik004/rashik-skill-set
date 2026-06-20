@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "azuredb",
+  "description": "Sync an Azure SQL database down to a local SQL Server (schema + data) via a BACPAC export/import with SqlPackage. One-way: Azure overwrites local.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Rashik Hasnat",
+    "email": "raja@promineo.no"
+  },
+  "homepage": "https://github.com/Rashik-Hasnat/rashik-skill-set",
+  "repository": "https://github.com/Rashik-Hasnat/rashik-skill-set",
+  "license": "MIT",
+  "keywords": ["azure-sql", "sqlpackage", "bacpac", "powershell", "database-sync", "localdb"]
+}

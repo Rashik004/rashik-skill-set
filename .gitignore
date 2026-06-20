@@ -32,3 +32,6 @@ logs/
 # Package manager
 *.lock
 !package-lock.json
+
+# Git worktrees
+.worktrees/

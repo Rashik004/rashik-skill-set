@@ -16,6 +16,13 @@
       "description": "Query Azure DevOps boards, PRs, sprints, and wikis from PowerShell via Microsoft Entra (no PATs).",
       "category": "devops",
       "tags": ["azure-devops", "powershell", "ado", "boards", "pull-requests", "wiki"]
+    },
+    {
+      "name": "azuredb",
+      "source": "./plugins/azuredb",
+      "description": "Sync an Azure SQL database down to a local SQL Server (schema + data) via a BACPAC export/import with SqlPackage. One-way: Azure overwrites local.",
+      "category": "database",
+      "tags": ["azure-sql", "sqlpackage", "bacpac", "powershell", "database-sync", "localdb"]
     }
   ]
 }
